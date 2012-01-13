@@ -1,411 +1,335 @@
+/* Copyright (C) 2012 Isaac Ashwin Ravindran
+ *
+ * Written By: Isaac Ashwin Ravindran
+ *
+ * Description: This program is used to convert static Wavefront OBJ (.obj) files into quickly loadable Static Mesh
+ * Files (.smf) for use in real time 3D programs. Where applicable, vertex data with indices are provided. Otherwise,
+ * interleaved per vertex data arrays are provided.
+ * 
+ * Usage: OBJ2SMF objfile.obj smffile.smf
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "Objects/Structs.h"
+#include "Structs.h"
 
-int vcount;
-int fcount;
-int ncount;
-int tcount;
-int main()
+Vertex3D *v; // Vertex array
+Normal3D *n; // Normal array
+TexCoord3D *t; // Texture Coordinate array
+Face3D *f; // Face array
+GLuint *indices; // Index array
+
+int vcount, fcount, ncount, tcount; // Variables to hold number of each element
+int vcounting, fcounting, ncounting, tcounting; // Variables to hold current position in arrays
+int set, faceMode; // Variables to handle face modes
+
+int main(int argc, char* argv[])
 {
-	FILE *in, *out; // Input and output files
-	char inFilename[1024], outFilename[1024]; // Input and output file names
+	FILE *obj, *smf; // Necessary Files
+	char objName[1024], smfName[1024]; // Filename arrays
 	
-	// Get filenames
-	printf("Please enter only the name of the OBJ file without spacing: ");
-	scanf("%s", inFilename);
-	printf("Please enter a name for the output Static Mesh File: ");
-	scanf("%s", outFilename);
-	strcat(inFilename, ".obj");
-	strcat(outFilename, ".smf");
-	// Open files
-	in = fopen(inFilename, "r");
-	out = fopen(outFilename, "wb");
-	
-	if(in == NULL)
+	if(argv[1] == NULL || argv[2] == NULL) // Check if program start arguments are present
 	{
-		printf("The specified OBJ file does not exist.\n");
-		return 1;
+		printf("Invalid input!\nUsage: OBJ2SMF objfile.obj smffile.smf\n"); // Print error
+		return -2; // Exit with error
 	}
-	// Create and clear header
-	int set;
-	int count;
-	struct SMFHeader h;
-	h.vcount = 0;
-	h.fcount = 0;
-	h.faceMode = 0;
-	set = 0;
 	
-	vcount = ncount = fcount = tcount = 0;
-	// Begin first reading
-	while(!feof(in))
+	strcpy(objName, argv[1]); // Copy input file name
+	strcpy(smfName, argv[2]); // Copy output file name
+	
+	obj = fopen(objName, "r"); // Open input file
+	
+	if(obj == NULL) // Report error if input file does not exist
 	{
-		if(feof(in))
+		printf("The specified OBJ file, %s, does not exist!\n", objName); // Print error
+		return -1; // Exit with error
+	}
+	
+	smf = fopen(smfName, "wb"); // Open output file
+	
+	// Reset variables
+	vcount = fcount = ncount = tcount = 0;
+	vcounting = fcounting = ncounting = tcounting = 0;
+	set = 0;
+	faceMode = 0;
+	
+	// Begin first reading
+	while(!feof(obj))
+	{
+		if(feof(obj)) // Break if end of file reached
 		{
 			break;
 		}
 		
-		char c[1024]; // Buffer to hold starting characters of OBJ file
-		fscanf(in, "%s", c); // Read in starting characters
-		if(strcmp(c, "v") == 0) // Check if it is a vertex
+		char prefix[5]; // Array to hold prefix of line
+		fscanf(obj, "%s", prefix); // Scan in prefix
+		
+		if(strcmp(prefix, "v") == 0) // If prefix denotes vertex
 		{
 			vcount++; // Increase vertex count
 		}
-		if(strcmp(c, "vn") == 0) // Check if it is a normal
+		else if(strcmp(prefix, "vn") == 0) // If prefix denotes normal
 		{
 			ncount++; // Increase normal count
 		}
-		if(strcmp(c, "vt") == 0) // Check if it is a texture coordinate
+		else if(strcmp(prefix, "vt") == 0) // If prefix denotes texture coordinate
 		{
 			tcount++; // Increase texture coordinate count
 		}
-		if(strcmp(c, "f") == 0) // Check if it is a face
+		else if(strcmp(prefix, "f") == 0) // If prefix denotes face description
 		{
-			char c; // Character to hold current character
-			fscanf(in, "%c", &c); // Get first character
-			if(c == ' ') // Skip a space
+			char c; // Variable to hold current working character
+			
+			fscanf(obj, "%c", &c); // Scan in first character
+			if(c == ' ') // If current character is a space
 			{
-				fscanf(in, "%c", &c); // Get next character
+				fscanf(obj, "%c", &c); // Get next character
 			}
-			if(c >= '0' && c <= '9') // Check if it is a number
+			if(c >= '0' && c <= '9') // If current character is a number
 			{
-				if(set == 0)
+				if(set == 0) // If face mode is not already set
 				{
-					h.faceMode = FACE_INDEX; // Set face mode to only index
+					faceMode = FACE_INDEX; // Set face mode to only indices
 				}
-				fscanf(in, "%c", &c); // Get next character
-			}
-			while(1 == 1) // Scan characters until end of numeric characters
-			{
-				fscanf(in, "%c", &c);
-				if(!(c >= '0' && c <='9'))
+				while(1 == 1) // Skip characters until next non-numeric character
 				{
-					break;
-				}
-			}
-			if(c == '/') // Check if there is a slash
-			{
-				if(set == 0)
-				{
-					h.faceMode = FACE_INDEX_TEX; // Set face mode to index and texture coordinates
-				}
-				fscanf(in, "%c", &c); // Get next character
-				if(c >= '0' && c <= '9') // Check if it is a number
-				{
-					if(set == 0)
+					if(!(c >= '0' && c <= '9')) // Check if current character is non-numeric
 					{
-						h.faceMode = FACE_INDEX_TEX; // Set face mode to index and texture coordinates
+						break; // Exit loop
 					}
-					while(1 == 1) // Scan characters until end of numeric characters
-					{
-						fscanf(in, "%c", &c);
-						if(!(c >= '0' && c <='9'))
-						{
-							break;
-						}
-					}
-					if(c == '/') // Check if it is a slash
-					{
-						if(set == 0)
-						{
-							h.faceMode = FACE_INDEX_TEX_NORM; // Set face mode to index, texture coordinates and normals
-						}
-					}
-				}
-				else if(c == '/') // Check if it is a slash
-				{
-					if(set == 0)
-					{
-						h.faceMode = FACE_INDEX_NORM; // Set face mode to index and normals
-					}
+					fscanf(obj, "%c", &c); // Get next character
 				}
 			}
-			set = 1; // Indicate that face mode has been set
+			if(c == '/') // If current character is a slash
+			{
+				if(set == 0) // If face mode is not already set
+				{
+					faceMode = FACE_INDEX_TEX; // Set face mode to indices and texture coordinates
+				}
+				fscanf(obj, "%c", &c); // Get next character
+			}
+			if(c == '/') // If current character is a slash
+			{
+				if(set == 0) // If face mode is not already set
+				{
+					faceMode = FACE_INDEX_NORM; // Set face mode to indices and normals
+				}
+			}
+			else if(c >= '0' && c <= '9') // Else if current character is a number
+			{
+				if(set == 0) // If face mode is not already set
+				{
+					faceMode = FACE_INDEX_TEX; // Set face mode to indices and texture coordinates
+				}
+				while(1 == 1) // Skip characters until next non-numeric character
+				{
+					if(!(c >= '0' && c <= '9')) // Check if current character is non-numeric
+					{
+						break; // Exit loop
+					}
+					fscanf(obj, "%c", &c); // Get next character
+				}
+				if(c == '/') // If current character is a slash
+				{
+					if(set == 0) // If face mode is not already set
+					{
+						faceMode = FACE_INDEX_TEX_NORM; // Set face mode to indices, texture coordinates and normals
+					}
+				}
+			}
+			set = 1; // Indicate that face mode is set
 			fcount++; // Increase face count
 		}
 	}
 	
-	if(h.faceMode == FACE_INDEX)
+	rewind(obj); // Reset input file
+	
+	// Allocate memory for all arrays
+	v = (Vertex3D*)malloc(sizeof(Vertex3D) * vcount);
+	n = (Normal3D*)malloc(sizeof(Normal3D) * ncount);
+	t = (TexCoord3D*)malloc(sizeof(TexCoord3D) * tcount);
+	f = (Face3D*)malloc(sizeof(Face3D) * fcount);
+	indices = (GLuint*)malloc(sizeof(GLuint) * fcount * 3);
+	
+	// Begin second reading
+	while(!feof(obj))
 	{
-		h.vcount = vcount;
-	}
-	h.fcount = fcount;
-	h.indexCount = fcount * 3;
-	
-	rewind(in); // Reset file
-	
-	struct Face3D *f;
-	struct Vertex3D *v;
-	struct Normal3D *n;
-	struct TexCoord3D *t;
-	GLuint *indices;
-	
-	f = (struct Face3D*)malloc(sizeof(struct Face3D)*fcount);
-	v = (struct Vertex3D*)malloc(sizeof(struct Vertex3D)*vcount);
-	n = (struct Normal3D*)malloc(sizeof(struct Normal3D)*ncount);
-	t = (struct TexCoord3D*)malloc(sizeof(struct TexCoord3D)*tcount);
-	
-	if(h.faceMode == FACE_INDEX)
-	{
-		indices = (GLuint*)malloc(sizeof(GLuint) * h.indexCount);
-	}
-	
-	count = 0;
-	// Begin reading vertex coordinates
-	while(!feof(in))
-	{
-		if(feof(in))
+		if(feof(obj)) // Check if end of file has been reached
 		{
-			break;
+			break; // Exit loop
 		}
-		char c[1024]; // Buffer to hold characters
-		fscanf(in, "%s", c);
-		if(strcmp(c, "v") == 0) // Scan and print and write vertex data
+		
+		char prefix[5]; // Array to hold prefix of line
+		fscanf(obj, "%s", prefix); // Scan in prefix
+		
+		if(strcmp(prefix, "v") == 0) // If prefix denotes vertex
 		{
-			//struct Vertex3D v;
-			fscanf(in, "%f %f %f", &v[count].x, &v[count].y, &v[count].z);
-			printf("%f %f %f\n", v[count].x, v[count].y, v[count].z);
-			//fwrite(&v, sizeof(struct Vertex3D), 1, out);
-			count++;
+			fscanf(obj, "%f %f %f", &v[vcounting].x, &v[vcounting].y, &v[vcounting].z); // Scan in vertex data
+			vcounting++; // Increase index of vertex array
 		}
-	}
-	
-	rewind(in); // Reset file
-	
-	count = 0;
-	// Begin reading normal vectors
-	while(!feof(in))
-	{
-		if(feof(in))
+		else if(strcmp(prefix, "vt") == 0) // If prefix denotes texture coordinate
 		{
-			break;
+			fscanf(obj, "%f %f %f", &t[tcounting].u, &t[tcounting].v, &t[tcounting].w); // Scan in texture coordinates
+			tcounting++; // Increase index of texture coordinate array
 		}
-		char c[1024];
-		fscanf(in, "%s", c);
-		if(strcmp(c, "vn") == 0) // Scan and print and write normal data
+		else if(strcmp(prefix, "vn") == 0) // If prefix denotes normals
 		{
-			//struct Normal3D n;
-			fscanf(in, "%f %f %f",& n[count].x, &n[count].y, &n[count].z);
-			printf("%f %f %f\n", n[count].x, n[count].y, n[count].z);
-			//fwrite(&n, sizeof(struct Normal3D), 1, out);
-			count++;
+			fscanf(obj, "%f %f %f", &n[ncounting].x, &n[ncounting].y, &n[ncounting].z); // Scan in normal data
+			ncounting++; // Increase index of normal array
 		}
-	}
-	
-	rewind(in); // Reset file
-	
-	// Begin reading texture coordinates
-	while(!feof(in))
-	{
-		if(feof(in))
+		else if(strcmp(prefix, "f") == 0) // If prefix denotes face description
 		{
-			break;
-		}
-		char c[1024];
-		fscanf(in, "%s", c);
-		if(strcmp(c, "vt") == 0) // Scan and print and write texture coordinates
-		{
-			//struct TexCoord3D t;
-			fscanf(in, "%f %f %f", &t[count].u, &t[count].v, &t[count].w);
-			if(t[count].w == 0)
+			if(faceMode == FACE_INDEX) // If face mode is only indices
 			{
-				t[count].w = 1;
+				fscanf(obj, "%d %d %d", &indices[fcounting], &indices[fcounting + 1], &indices[fcounting + 2]); // Scan vertex indices into indices array
+				indices[fcounting]--;
+				indices[fcounting + 1]--;
+				indices[fcounting + 2]--;
+				fcounting += 3; // Increase index of indices array
 			}
-			//fscanf(in, "%f %f", &t.u, &t.v);
-			//t.w = 0;
-			printf("%f %f %f\n", t[count].u, t[count].v, t[count].w);
-			count++;
-			//fwrite(&t, sizeof(struct TexCoord3D), 1, out);
-		}
-	}
-	
-	rewind(in); // Reset file
-	if(in == NULL)
-	{
-		printf("SHIT");
-	}
-	count = 0;
-	// Begin reading face information
-	while(!feof(in))
-	{
-		if(feof(in))
-		{
-			break;
-		}
-		char c[1024]; // Buffer to hold characters
-		fscanf(in, "%s", c);
-		if(strcmp(c, "f") == 0) // Scan and print and write face data based on input format
-		{
-			if(h.faceMode == FACE_INDEX)
+			else if(faceMode == FACE_INDEX_TEX) // If face mode is indices and texture coordinates
 			{
-				//fscanf(in, "%d %d %d", &f.v1, &f.v2, &f.v3); // Format (v1 v2 v3)
-				fscanf(in, "%d", &indices[count]);
-				count++;
-				fscanf(in, "%d", &indices[count]);
-				count++;
-				fscanf(in, "%d", &indices[count]);
-				count++;
+				fscanf(obj, "%d/%d %d/%d %d/%d", &f[fcounting].v1, &f[fcounting].t1, &f[fcounting].v2, &f[fcounting].t2, &f[fcounting].v3, &f[fcounting].t3); // Scan in vertex and texture coordinate indices into face array
+				f[fcounting].v1--;
+				f[fcounting].v2--;
+				f[fcounting].v3--;
+				f[fcounting].t1--;
+				f[fcounting].t2--;
+				f[fcounting].t3--;
+				fcounting++; // Increase index of face array
 			}
-			if(h.faceMode == FACE_INDEX_TEX)
+			else if(faceMode == FACE_INDEX_TEX_NORM) // If face mode is indices, texture coordinates and normals
 			{
-				char c; // Character to hold spaces and slashes
-				fscanf(in, "%d%c%d %d%c%d %d%c%d", &f[count].v1, &c, &f[count].t1, &f[count].v2, &c, &f[count].t2, &f[count].v3, &c, &f[count].t3); // Format (v1/t1 v2/t2 v3/t3)
-				f[count].v1--;
-				f[count].v2--;
-				f[count].v3--;
-				f[count].n1 = 0;
-				f[count].n2 = 0;
-				f[count].n3 = 0;
-				f[count].t1--;
-				f[count].t2--;
-				f[count].t3--;
-				printf("%d/%d %d/%d %d/%d\n", f[count].v1, f[count].t1, f[count].v2, f[count].t2, f[count].v3, f[count].t3);
-				count++;
-				//fwrite(&f, sizeof(struct Face3D), 1, out);
+				fscanf(obj, "%d/%d/%d %d/%d/%d %d/%d/%d", &f[fcounting].v1, &f[fcounting].t1, &f[fcounting].n1, &f[fcounting].v2, &f[fcounting].t2, &f[fcounting].n2, &f[fcounting].v3, &f[fcounting].t3, &f[fcounting].n3); // Scan in vertex, texture coordinate and normal indices
+				f[fcounting].v1--;
+				f[fcounting].v2--;
+				f[fcounting].v3--;
+				f[fcounting].t1--;
+				f[fcounting].t2--;
+				f[fcounting].t3--;
+				f[fcounting].n1--;
+				f[fcounting].n2--;
+				f[fcounting].n3--;
+				fcounting++; // Increase index of face array
 			}
-			if(h.faceMode == FACE_INDEX_TEX_NORM)
+			else if(faceMode == FACE_INDEX_NORM) // If face mode is indices and normals
 			{
-				char c;
-				fscanf(in, "%d%c%d%c%d %d%c%d%c%d %d%c%d%c%d", &f[count].v1, &c, &f[count].t1, &c, &f[count].n1, &f[count].v2, &c, &f[count].t2, &c, &f[count].n2, &f[count].v3, &c, &f[count].t3, &c, &f[count].n3); //Format (v1/t1/n1 v2/t2/n2 v3/t3/n3)
-				f[count].v1--;
-				f[count].v2--;
-				f[count].v3--;
-				f[count].n1--;
-				f[count].n2--;
-				f[count].n3--;
-				f[count].t1--;
-				f[count].t2--;
-				f[count].t3--;
-				
-				printf("%d/%d/%d %d/%d/%d %d/%d/%d\n", f[count].v1, f[count].t1, f[count].n1, f[count].v2, f[count].t2, f[count].n2, f[count].v3, f[count].t3, f[count].n3);
-				count++;
-				//fwrite(&f, sizeof(struct Face3D), 1, out);
-			}
-			if(h.faceMode == FACE_INDEX_NORM)
-			{
-				char c;
-				fscanf(in, "%d%c%c%d %d%c%c%d %d%c%c%d", &f[count].v1, &c, &c, &f[count].n1, &f[count].v2, &c, &c, &f[count].n2, &f[count].v3, &c, &c, &f[count].n3); // Format (v1//n1 v2//n2 v3//n3)
-				f[count].v1--;
-				f[count].v2--;
-				f[count].v3--;
-				f[count].n1--;
-				f[count].n2--;
-				f[count].n3--;
-				f[count].t1 = 0;
-				f[count].t2 = 0;
-				f[count].t3 = 0;
-				
-				printf("%d//%d %d//%d %d//%d\n", f[count].v1, f[count].n1, f[count].v2, f[count].n2, f[count].v3, f[count].n3);
-				count++;
-				//fwrite(&f, sizeof(struct Face3D), 1, out);
+				fscanf(obj, "%d//%d %d//%d %d//%d", &f[fcounting].v1, &f[fcounting].n1, &f[fcounting].v2, &f[fcounting].n2, &f[fcounting].v3, &f[fcounting].n3); // Scan in vertex and normal indices
+				f[fcounting].v1--;
+				f[fcounting].v2--;
+				f[fcounting].v3--;
+				f[fcounting].n1--;
+				f[fcounting].n2--;
+				f[fcounting].n3--;
+				fcounting++; // Increase index of face array
 			}
 		}
 	}
-	printf("\n\nVertices: %d Faces: %d Normals: %d Texture Coordinates: %d Face Mode: %d Indices: %d\n\n", vcount, fcount, ncount, tcount, h.faceMode, h.indexCount); // Print OBJ file specs
 	
-	fwrite(&h, sizeof(struct SMFHeader), 1, out); // Write header
+	// Interleaving of Per Vertex Data
+	InterleavedIndexNorm *iN; // Array to hold interleaved vertex and normal data
+	InterleavedIndexTex *iT; // Array to hold interleaved vertex and texture coordinate information
+	InterleavedAll *iA; // Array to hold interleaved vertex, texture coordinate and normal data
 	
-	if(h.faceMode == FACE_INDEX)
+	if(faceMode == FACE_INDEX_TEX) // If face mode is indices and texture coordinates
 	{
-		fwrite(v, sizeof(struct Vertex3D) * vcount, 1, out);
-		fwrite(indices, sizeof(GLuint) * h.indexCount, 1, out);
+		int i, j; // Indices to arrays
+		
+		iT = (InterleavedIndexTex*)malloc(sizeof(InterleavedIndexTex) * fcount * 3); // Allocate memory for array
+		
+		for(i = 0, j = 0; i < fcount; i++, j += 3) // Loop through arrays
+		{
+			iT[j].v = v[f[i].v1]; // Copy vertex data into interleaved array based on index provided in face description
+			iT[j].t = t[f[i].t1]; // Copy texture coordinates into interleaved array based on index provided in face description
+			
+			iT[j + 1].v = v[f[i].v2];
+			iT[j + 1].t = t[f[i].t2];
+			
+			iT[j + 2].v = v[f[i].v3];
+			iT[j + 2].t = t[f[i].t3];
+		}
+	}
+	else if(faceMode == FACE_INDEX_TEX_NORM) // If face mode is indices, texture coordinates and normals
+	{
+		int i, j; // Indices to arrays
+		
+		iA = (InterleavedAll*)malloc(sizeof(InterleavedAll) * fcount * 3); // Allocate memory for array
+		
+		for(i = 0, j = 0; i < fcount; i++, j += 3) // Loop through arrays
+		{
+			iA[j].v = v[f[i].v1]; // Copy vertex data into interleaved array based on index provided in face description
+			iA[j].t = t[f[i].t1]; // Copy texture coordinates into interleaved array based on index provided in face description
+			iA[j].n = n[f[i].n1]; // Copy normal data into interleaved array based on index provided in face description
+			
+			iA[j + 1].v = v[f[i].v2];
+			iA[j + 1].t = t[f[i].t2];
+			iA[j + 1].n = n[f[i].n2];
+			
+			iA[j + 2].v = v[f[i].v3];
+			iA[j + 2].t = t[f[i].t3];
+			iA[j + 2].n = n[f[i].n3];
+		}
+	}
+	else if(faceMode == FACE_INDEX_NORM) // If face mode is indices and normals
+	{
+		int i, j; // Indices to arrays
+		
+		iN = (InterleavedIndexNorm*)malloc(sizeof(InterleavedIndexNorm) * fcount * 3); // Allocate memory for array
+		
+		for(i = 0, j = 0; i < fcount; i++, j += 3) // Loop through arrays
+		{
+			iN[j].v = v[f[i].v1]; // Copy vertex data into interleaved array based on index provided in face description
+			iN[j].n = n[f[i].n1]; // Copy normal data into interleaved array based on index provided in face description
+			
+			iN[j + 1].v = v[f[i].v2];
+			iN[j + 1].n = n[f[i].n2];
+			
+			iN[j + 2].v = v[f[i].v3];
+			iN[j + 2].n = n[f[i].n3];
+		}
+	}
+	
+	SMFHeader h; // Structure to store information about file
+	h.indexCount = fcount * 3; // Store index count
+	h.vcount = vcount; // Store number of vertices
+	h.fcount = fcount; // Store number of faces
+	h.faceMode = faceMode; // Store face mode
+	
+	if(faceMode == FACE_INDEX) // If face mode is only index
+	{
+		fwrite(&h, sizeof(SMFHeader), 1, smf); // Write header
+		fwrite(v, sizeof(Vertex3D) * vcount, 1, smf); // Write vertex array into SMF file
+		fwrite(indices, sizeof(GLuint) * fcount * 3, 1, smf); // Write index array into SMF file
+		printf("OBJ file successfully compiled!\n\nVertices: %d Faces: %d Indices: %d Face Mode: INDEX\n", vcount, fcount, (fcount * 3)); // Output file specs
 		free(v);
 		free(indices);
 	}
-	else if(h.faceMode == FACE_INDEX_TEX)
+	else if(faceMode == FACE_INDEX_TEX) // If face mode is indices and texture coordinates
 	{
-		struct InterleavedIndexTex *iT;
-		int i, j;
-		iT = (struct InterleavedIndexTex*)malloc(sizeof(struct InterleavedIndexTex) * h.indexCount);
-		
-		for(i = 0, j = 0; i < h.indexCount, j < fcount; i += 3, j++)
-		{	
-			iT[i].v = v[f[j].v1];
-			iT[i].t = t[f[j].t1];
-			printf("Vertex 1: %f %f %f ", iT[i - 2].v.x, iT[i - 2].v.y, iT[i - 2].v.z);
-			printf("Texture Coordinate 1: %f %f %f\n", iT[i - 2].t.u, iT[i - 2].t.v, iT[i - 2].t.w);
-			
-			iT[i + 1].v = v[f[j].v2];
-			iT[i + 1].t = t[f[j].t2];
-			printf("Vertex 2: %f %f %f ", iT[i - 1].v.x, iT[i - 1].v.y, iT[i - 1].v.z);
-			printf("Texture Coordinate 2: %f %f %f\n", iT[i - 1].t.u, iT[i - 1].t.v, iT[i - 1].t.w);
-			
-			iT[i + 2].v = v[f[j].v3];
-			iT[i + 2].t = t[f[j].t3];
-			printf("Vertex 3: %f %f %f ", iT[i].v.x, iT[i].v.y, iT[i].v.z);
-			printf("Texture Coordinate 3: %f %f %f\n\n", iT[i].t.u, iT[i].t.v, iT[i].t.w);
-		}
-		
-		fwrite(iT, sizeof(struct InterleavedIndexTex), h.indexCount, out);
+		fwrite(&h, sizeof(SMFHeader), 1, smf); // Write header
+		fwrite(iT, sizeof(InterleavedIndexTex) * fcount * 3, 1, smf); // Write interleaved index and texture coordinate array into file
+		printf("OBJ file successfully compiled!\n\nVertices: %d Texture Coordinates: %d Faces: %d Indices: %d Face Mode: INDEX_TEX\n", vcount, tcount, fcount, (fcount * 3)); // Output file specs
 		free(iT);
 	}
-	else if(h.faceMode == FACE_INDEX_NORM)
+	else if(faceMode == FACE_INDEX_TEX_NORM) // If face mode is indices, texture coordinates and normals
 	{
-		struct InterleavedIndexNorm *iN;
-		int i;
-		iN = (struct InterleavedIndexNorm*)malloc(sizeof(struct InterleavedIndexTex) * h.indexCount);
-		
-		for(i = 0; i < fcount; i++)
-		{
-			int j;
-			j = 0;
-			
-			iN[i + j].v = v[f[i].v1];
-			iN[i + j].n = n[f[i].n1];
-			
-			j++;
-			
-			iN[i + j].v = v[f[i].v2];
-			iN[i + j].n = n[f[i].n2];
-			
-			j++;
-			
-			iN[i + j].v = v[f[i].v3];
-			iN[i + j].n = n[f[i].n3];
-			
-			//printf("Vertex: %d %d %d Texture Coordinate: %d %d %d\n", iN[i].v,
-		}
-		
-		fwrite(iN, sizeof(struct InterleavedIndexNorm) * h.indexCount, 1, out);
-		free(iN);
-	}
-	else if(h.faceMode == FACE_INDEX_TEX_NORM)
-	{
-		struct InterleavedAll *iA;
-		int i;
-		iA = (struct InterleavedAll*)malloc(sizeof(struct InterleavedAll) * h.indexCount);
-		
-		for(i = 0; i < fcount; i++)
-		{
-			int j;
-			j = 0;
-			
-			iA[i + j].v = v[f[i].v1];
-			iA[i + j].n = n[f[i].n1];
-			iA[i + j].t = t[f[i].t1];
-			
-			j++;
-			
-			iA[i + j].v = v[f[i].v2];
-			iA[i + j].n = n[f[i].n2];
-			iA[i + j].t = t[f[i].t2];
-			
-			j++;
-			
-			iA[i + j].v = v[f[i].v3];
-			iA[i + j].n = n[f[i].n3];
-			iA[i + j].t = t[f[i].t3];
-		}
-		
-		fwrite(iA, sizeof(struct InterleavedAll) * h.indexCount, i, out);
+		fwrite(&h, sizeof(SMFHeader), 1, smf); // Write header
+		fwrite(iA, sizeof(InterleavedAll) * fcount * 3, 1, smf); // Write interleaved index, texture coordinate and normal array into file
+		printf("OBJ file successfully compiled!\n\nVertices: %d Texture Coordinates: %d Normals: %d Faces %d Indices: %d Face Mode: INDEX_TEX_NORM\n", vcount, tcount, ncount, fcount, (fcount * 3)); // Output file specs
 		free(iA);
 	}
+	else if(faceMode == FACE_INDEX_NORM) // If face mode is indices and normals
+	{
+		fwrite(&h, sizeof(SMFHeader), 1, smf); // Write header
+		fwrite(iN, sizeof(InterleavedIndexNorm) * fcount * 3, 1, smf); // Write interleaved index and normal array into file
+		printf("OBJ file successfully compiled!\n\nVertices: %d Normals: %d Faces: %d Indices: %d Face Mode: INDEX_NORM\n", vcount, ncount, fcount, (fcount * 3)); // Output file specs
+		free(iN);
+	}
 	
+	fclose(obj); // Close input file
+	fclose(smf); // Close output file
 	
-	// Close files
-	fclose(out);
-	fclose(in);
-	return 0;
+	return 0; // Exit program
 }

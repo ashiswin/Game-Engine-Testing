@@ -72,8 +72,9 @@ struct InterleavedAll
 
 struct MTFHeader
 {
-	int width;
-	int height;
-	int dataSize;
-	bool hasAlpha;
+	GLuint width;
+	GLuint height;
+	GLuint bpp;
+	GLuint imageSize;
+	GLuint type;
 };

@@ -4,7 +4,7 @@
 #include <iostream>
 #include <stdlib.h>
 
-#include "Objects/CStaticMesh.h"
+#include "CStaticMesh.h"
 
 CStaticMesh *Model;
 
