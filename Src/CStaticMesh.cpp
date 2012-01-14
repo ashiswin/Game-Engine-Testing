@@ -54,6 +54,9 @@ CStaticMesh::CStaticMesh(char filename[1024])
 		fread(iN, sizeof(InterleavedIndexNorm) * indexCount, 1, smf); // Read in interleaved data
 	}
 	free(h); // Free memory held by header structure
+	
+	transx = transy = transz = 0.0f;
+	rotx = roty = rotz = 0.0f;
 }
 
 // Destructor to free all memory
@@ -80,25 +83,69 @@ CStaticMesh::~CStaticMesh(void)
 // Function to load texture data
 bool CStaticMesh::LoadTextureFile(char filename[1024])
 {
-	return false;
+	FILE *mtf; // Pointer to Mesh Texture File
+	MTFHeader *h; // Pointer to structure to hold header data
+	
+	mtf = fopen(filename, "rb"); // Open MTF file
+	
+	if(mtf == NULL) // Check if MTF file exists
+	{
+		printf("The specified MTF file, %s, does not exist!\n", filename); // Print error
+		return false; // Return error
+	}
+	h = (MTFHeader*)malloc(sizeof(MTFHeader)); // Allocate memory for header data
+	
+	fread(h, sizeof(MTFHeader), 1, mtf); // Read in header data
+	
+	// Transfer data from header to local variables
+	width = h->width;
+	height = h->height;
+	bpp = h->bpp;
+	type = h->type;
+	
+	textureData = (GLubyte*)malloc(h->imageSize); // Allocate memory for texture data
+	
+	fread(textureData, h->imageSize, 1, mtf); // Read in texture data
+	
+	free(h); // Free memory from header
+	fclose(mtf); // Close MTF file
+	
+	glGenTextures(1, &textureId); // Generate a unique texture ID
+   	glBindTexture(GL_TEXTURE_2D, textureId); // Bind current texture
+	
+	// Set texture parameters
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	
+	glTexImage2D(GL_TEXTURE_2D, 0, type, width, height, 0, type, GL_UNSIGNED_BYTE, textureData); // Load texture data
+	
+	return true; // Exit with success
 }
 
 // Function to render stored mesh data
 void CStaticMesh::RenderMesh(void)
 {
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear color and depth buffers
+	glTranslatef(transx, transy, transz);
+	glRotatef(rotx, 1.0f, 0.0f, 0.0f);
+	glRotatef(roty, 0.0f, 1.0f, 0.0f);
 	glEnableClientState(GL_VERTEX_ARRAY); // Enable vertex array processing
 	if(faceMode == FACE_INDEX) // Execute if mode is FACE_INDEX
 	{
-		glVertexPointer(3, GL_FLOAT, 0, v);
-		glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, indices);
+		glVertexPointer(3, GL_FLOAT, 0, v); // Specify pointer to vertex data array
+		glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, indices); // Specify indices and render format
 	}
 	else if(faceMode == FACE_INDEX_TEX) // Execute if mode is FACE_INDEX_TEX
 	{
+		glEnable(GL_TEXTURE_2D); // Enable 2D textures
 		glEnableClientState(GL_TEXTURE_COORD_ARRAY); // Enable texture coord array processing
 		glVertexPointer(3, GL_FLOAT, sizeof(struct InterleavedIndexTex), &iT[0].v); // Load vertex array into video memory
 		glTexCoordPointer(3, GL_FLOAT, sizeof(struct InterleavedIndexTex), &iT[0].t); // Load texture coord array into video memory
 		glDrawArrays(GL_TRIANGLES, 0, indexCount); // Draw data in provided arrays as a number of triangles represented by faceCount
 		glDisableClientState(GL_TEXTURE_COORD_ARRAY); // Disable texture coord array processing
+		glDisable(GL_TEXTURE_2D); // Disable 2D textures
 	}
 	else if(faceMode == FACE_INDEX_NORM) // Execute if mode is FACE_INDEX_NORM
 	{
@@ -110,6 +157,7 @@ void CStaticMesh::RenderMesh(void)
 	}
 	else if(faceMode == FACE_INDEX_TEX_NORM) // Execute if mode is FACE_INDEX_TEX_NORM
 	{
+		glEnable(GL_TEXTURE_2D); // Enable 2D textures
 		glEnableClientState(GL_TEXTURE_COORD_ARRAY); // Enable texture coord array processing
 		glEnableClientState(GL_NORMAL_ARRAY); // Enable normal array processing
 		glVertexPointer(3, GL_FLOAT, sizeof(struct InterleavedAll), &iA[0].v); // Load vertex array into video memory
@@ -118,8 +166,10 @@ void CStaticMesh::RenderMesh(void)
 		glDrawArrays(GL_TRIANGLES, 0, indexCount); // Draw data in provided arrays as a number of triangles represented by faceCount
 		glDisableClientState(GL_NORMAL_ARRAY); // Disable normal array processing
 		glDisableClientState(GL_TEXTURE_COORD_ARRAY); // Disable texture coord array processing
+		glDisable(GL_TEXTURE_2D); // Disable 2D textures
 	}
 	glDisableClientState(GL_VERTEX_ARRAY); // Disable vertex array processing
+	glFlush(); // Force completion of all drawing operations
 }
 
 void CStaticMesh::PrintMeshData(void)
@@ -134,4 +184,23 @@ void CStaticMesh::PrintMeshData(void)
 			printf("Texture Coordinate: %f %f %f\n", iT[i].t.u, iT[i].t.v, iT[i].t.w);
 		}
 	}
+}
+
+void CStaticMesh::PrintTextureData(void)
+{
+	printf("Texture Info:\nWidth: %d Height: %d\n\n", width, height);
+}
+
+void CStaticMesh::TranslateModel(GLfloat x, GLfloat y, GLfloat z)
+{
+	transx = x;
+	transy = y;
+	transz = z;
+}
+
+void CStaticMesh::RotateModel(GLfloat x, GLfloat y, GLfloat z)
+{
+	rotx = x;
+	roty = y;
+	rotz = z;
 }

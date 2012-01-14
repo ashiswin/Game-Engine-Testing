@@ -1,3 +1,13 @@
+/* Copyright (C) 2012 Isaac Ashwin Ravindran
+ *
+ * Written By: Isaac Ashwin Ravindran
+ *
+ * Description: This program is used to convert Targa (.tga) images to quickly loadable
+ * Mesh Texture Files (.mtf) so that no parsing is required to load it.
+ * 
+ * Usage: TGA2MTF tgafile.tga mtffile.mtf
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +58,7 @@ int main(int argc, char* argv[])
 		return -1; // Exit with error
 	}
 	
-	mtf = fopen(argv[2], "rb"); // Open output file
+	mtf = fopen(argv[2], "wb"); // Open output file
 	
 	fread(&tgaheader, sizeof(TGAHeader), 1, tga); // Read in TGA file header
 	
@@ -88,8 +98,12 @@ int main(int argc, char* argv[])
         	imageData[cswap] ^= imageData[cswap+2];
     	}
 	
-	printf("Height: %d Width: %d\n", h.height, h.width); // Print file specs
+	fwrite(&h, sizeof(MTFHeader), 1, mtf); // Write header to MTF file
+	fwrite(imageData, h.imageSize, 1, mtf); // Write image data to MTF file
 	
+	printf("MTF file successfully compiled!\nHeight: %d Width: %d\n", h.height, h.width); // Print file specs
+	
+	fclose(mtf);
 	fclose(tga); // Close input file
 	
 	return 0; // Exit program

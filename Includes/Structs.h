@@ -1,6 +1,10 @@
+#ifdef __APPLE__
 #include <OpenGL/gl.h>
 #include <OpenGL/glu.h>
 #include <GLUT/glut.h>
+#else
+#include <OpenGL/glut.h>
+#endif
 
 #define FACE_INDEX 0 // Face Format (v1 v2 v3)
 #define FACE_INDEX_TEX 1 // Face Format (v1/t1 v2/t2 v3/t3)
@@ -78,3 +82,5 @@ struct MTFHeader
 	GLuint imageSize;
 	GLuint type;
 };
+
+typedef GLfloat Matrix3D[16];

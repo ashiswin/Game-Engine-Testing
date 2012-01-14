@@ -16,11 +16,23 @@ class CStaticMesh {
 		
 		GLuint width; // Texture width
 		GLuint height; // Texture height
+		GLuint bpp; // Bits per pixel
+		GLuint type; // GL_RGB or GL_RGBA
+		GLuint textureId; // Texture ID for reference to texture
 		GLubyte *textureData; // Array of texture data
+		
+		GLfloat transx, transy, transz; // Translation data
+		GLfloat rotx, roty, rotz; // Rotation data
+		Matrix3D localMatrix; // Local matrix with all data in it
 	public:
 		CStaticMesh(char filename[1024]); // Constructor to initialize object from a Static Mesh File
 		~CStaticMesh(void);
 		bool LoadTextureFile(char filename[1024]); // Load texture file
 		void RenderMesh(void); // Render mesh data
 		void PrintMeshData(void);
+		void PrintTextureData(void);
+		void MatrixMultiply4f(Matrix3D m2, Matrix3D result);
+		void LoadIdentityMatrix(void);
+		void TranslateModel(GLfloat x, GLfloat y, GLfloat z);
+		void RotateModel(GLfloat x, GLfloat y, GLfloat z);
 };
