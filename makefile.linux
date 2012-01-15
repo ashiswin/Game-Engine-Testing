@@ -1,6 +1,6 @@
 INCLUDEDIR=-IIncludes
 LIBDIR=-LLib
-LIBRARIES=-lengine -framework OpenGL -framework GLUT
+LIBRARIES=-lengine -lGL -lGLU -lglut
 CFLAGS=$(INCLUDEDIR) $(LIBDIR) $(LIBRARIES)
 all: tools
 

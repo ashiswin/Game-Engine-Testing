@@ -90,12 +90,18 @@ int main(int argc, char* argv[])
 	
 	fread(imageData, h.imageSize, 1, tga); // Read in image data
 	
-	// Swap BGR to RGB for OpenGL to render
+	// Swap BGRA to RGBA
 	for(GLuint cswap = 0; cswap < (int)h.imageSize; cswap += bytesPerPixel)
     	{
-        	// 1st Byte XOR 3rd Byte XOR 1st Byte XOR 3rd Byte
-        	imageData[cswap] ^= imageData[cswap+2] ^=
-        	imageData[cswap] ^= imageData[cswap+2];
+		GLubyte temp[4];
+		temp[0] = imageData[cswap];
+		temp[1] = imageData[cswap + 1];
+		temp[2] = imageData[cswap + 2];
+		temp[3] = imageData[cswap + 3];
+		imageData[cswap] = temp[2];
+		imageData[cswap + 1] = temp[1];
+		imageData[cswap + 2] = temp[0];
+		imageData[cswap + 3] = temp[3];
     	}
 	
 	fwrite(&h, sizeof(MTFHeader), 1, mtf); // Write header to MTF file

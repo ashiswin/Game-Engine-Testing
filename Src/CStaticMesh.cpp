@@ -1,3 +1,15 @@
+/* Copyright (C) 2012 Isaac Ashwin Ravindran
+ *
+ * Written By: Isaac Ashwin Ravindran
+ *
+ * Description: This object helps with the storage and rendering of a static mesh.
+ * With data loaded from a Static Mesh File and Mesh Texture File, it stores data for
+ * fast access during run time.
+ * 
+ * Usage: Include CStaticMesh.h into your program and link your program with the engine's
+ * library to use.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -131,6 +143,7 @@ void CStaticMesh::RenderMesh(void)
 	glTranslatef(transx, transy, transz);
 	glRotatef(rotx, 1.0f, 0.0f, 0.0f);
 	glRotatef(roty, 0.0f, 1.0f, 0.0f);
+	glRotatef(rotz, 0.0f, 0.0f, 1.0f);
 	glEnableClientState(GL_VERTEX_ARRAY); // Enable vertex array processing
 	if(faceMode == FACE_INDEX) // Execute if mode is FACE_INDEX
 	{
